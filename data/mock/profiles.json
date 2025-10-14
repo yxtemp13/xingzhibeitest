@@ -1,0 +1,34 @@
+[
+  {
+    "id": "profile-1",
+    "title": "Checkout service CPU",
+    "service": "checkout",
+    "created_at": "2024-01-15T10:00:00",
+    "sample_rate_hz": 97.5,
+    "flamegraph_url": "https://example.com/flamegraphs/checkout",
+    "metrics": {
+      "total_samples": 120000,
+      "p95_cpu_ms": 12.5
+    },
+    "tags": {
+      "region": "us-east-1",
+      "env": "staging"
+    }
+  },
+  {
+    "id": "profile-2",
+    "title": "Payments API CPU",
+    "service": "payments",
+    "created_at": "2024-01-16T14:30:00",
+    "sample_rate_hz": 101.0,
+    "flamegraph_url": "https://example.com/flamegraphs/payments",
+    "metrics": {
+      "total_samples": 98000,
+      "p95_cpu_ms": 18.9
+    },
+    "tags": {
+      "region": "eu-central-1",
+      "env": "production"
+    }
+  }
+]

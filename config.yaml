@@ -1,0 +1,35 @@
+prometheus:
+  base_url: "http://localhost:9090"
+  mock_data_dir: "data/mock"
+hosts:
+  - name: "demo-host-1"
+    address: "demo-host-1:9100"
+    labels:
+      environment: "staging"
+      cpu_arch: "x86_64"
+  - name: "demo-host-2"
+    address: "demo-host-2:9100"
+    labels:
+      environment: "production"
+      cpu_arch: "arm64"
+diagnostics:
+  output_dir: "data/jobs"
+  job_types:
+    runqlen:
+      title: "Run queue length histogram"
+      script: "backend/scripts/simulate_bcc_job.py"
+      mode: "histogram"
+    runqlat:
+      title: "Run queue latency histogram"
+      script: "backend/scripts/simulate_bcc_job.py"
+      mode: "histogram"
+    offcputime:
+      title: "Off-CPU time call stacks"
+      script: "backend/scripts/simulate_bcc_job.py"
+      mode: "stacks"
+    biolatency:
+      title: "Block I/O latency distribution"
+      script: "backend/scripts/simulate_bcc_job.py"
+      mode: "histogram"
+profiles:
+  data_file: "data/mock/profiles.json"
