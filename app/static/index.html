@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>服务器性能诊断工具</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f7fb;
+        color: #1f2933;
+      }
+      header {
+        background: #1e88e5;
+        color: white;
+        padding: 1.2rem 2rem;
+      }
+      main {
+        padding: 2rem;
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 600;
+      }
+      h2 {
+        margin: 0;
+        font-size: 1.2rem;
+        font-weight: 600;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #e4e7ec;
+        padding: 0.4rem 0.6rem;
+        text-align: left;
+      }
+      th {
+        color: #52606d;
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.3rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .badge.ok {
+        background: #e3fcef;
+        color: #087f5b;
+      }
+      .badge.warning {
+        background: #fff3cd;
+        color: #b25800;
+      }
+      .badge.critical {
+        background: #fde8e8;
+        color: #c81e1e;
+      }
+      ul {
+        padding-left: 1.2rem;
+        margin: 0;
+      }
+      footer {
+        text-align: center;
+        padding: 1rem;
+        color: #52606d;
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>服务器性能诊断工具</h1>
+      <p>实时查看主机运行状态、进程热点与健康评估</p>
+    </header>
+    <main>
+      <section class="card" id="system-card">
+        <h2>系统概览</h2>
+        <div id="system-overview">加载中...</div>
+      </section>
+      <section class="card" id="analysis-card">
+        <h2>健康诊断</h2>
+        <div id="analysis">加载中...</div>
+      </section>
+      <section class="card" id="process-card">
+        <h2>Top 进程 (CPU)</h2>
+        <div class="controls">
+          <label>
+            排序：
+            <select id="process-sort">
+              <option value="cpu">CPU</option>
+              <option value="memory">内存</option>
+            </select>
+          </label>
+        </div>
+        <div id="process-table">加载中...</div>
+      </section>
+    </main>
+    <footer>
+      FastAPI + psutil 提供支持，可通过 <code>uvicorn app.main:app</code> 启动。
+    </footer>
+    <script>
+      async function fetchJSON(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`请求 ${url} 失败: ${response.status}`);
+        }
+        return await response.json();
+      }
+
+      function formatBytes(bytes) {
+        if (bytes === null || bytes === undefined) return "N/A";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let value = Number(bytes);
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value /= 1024;
+          unitIndex += 1;
+        }
+        return `${value.toFixed(1)} ${units[unitIndex]}`;
+      }
+
+      async function loadSystemOverview() {
+        const data = await fetchJSON('/api/system?sample_duration=0.5');
+        const memory = data.memory || {};
+        const swap = data.swap || {};
+        const load = data.load || {};
+        document.getElementById('system-overview').innerHTML = `
+          <p><strong>主机：</strong>${data.hostname || '未知'} (${data.platform || ''})</p>
+          <p><strong>CPU 使用率：</strong>${data.cpu_percent?.toFixed(1) || 0}%</p>
+          <p><strong>负载：</strong>load1=${(load.load1 || 0).toFixed(2)}, load5=${(load.load5 || 0).toFixed(2)}, load15=${(load.load15 || 0).toFixed(2)}</p>
+          <p><strong>内存使用：</strong>${memory.percent?.toFixed ? memory.percent.toFixed(1) : memory.percent}% (${formatBytes(memory.used)} / ${formatBytes(memory.total)})</p>
+          <p><strong>Swap 使用：</strong>${swap.percent?.toFixed ? swap.percent.toFixed(1) : swap.percent}%</p>
+        `;
+      }
+
+      function renderAnalysis(analysis) {
+        const severity = analysis.severity || 'ok';
+        const badge = `<span class="badge ${severity}">${severity.toUpperCase()}</span>`;
+        const list = (analysis.assessments || [])
+          .map(item => `<li>${item}</li>`)
+          .join('');
+        document.getElementById('analysis').innerHTML = `${badge}<ul>${list}</ul>`;
+      }
+
+      async function loadAnalysis() {
+        const data = await fetchJSON('/api/diagnostics/analysis?sample_duration=0.5');
+        renderAnalysis(data.analysis || {});
+      }
+
+      function renderProcesses(items) {
+        if (!items.length) {
+          document.getElementById('process-table').innerHTML = '<p>未获取到进程数据</p>';
+          return;
+        }
+        const rows = items
+          .map(
+            (proc) => `
+            <tr>
+              <td>${proc.pid}</td>
+              <td>${proc.name || ''}</td>
+              <td>${proc.cpu_percent?.toFixed(1) || 0}%</td>
+              <td>${proc.memory_percent?.toFixed(1) || 0}%</td>
+              <td>${proc.num_threads || 0}</td>
+            </tr>`
+          )
+          .join('');
+        document.getElementById('process-table').innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>PID</th>
+                <th>名称</th>
+                <th>CPU%</th>
+                <th>内存%</th>
+                <th>线程</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      async function loadProcesses(sortBy) {
+        const data = await fetchJSON(`/api/processes?limit=10&sort_by=${sortBy}`);
+        renderProcesses(data.items || []);
+      }
+
+      document.getElementById('process-sort').addEventListener('change', (event) => {
+        loadProcesses(event.target.value);
+      });
+
+      async function refresh() {
+        try {
+          await Promise.all([loadSystemOverview(), loadAnalysis(), loadProcesses(document.getElementById('process-sort').value)]);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 10000);
+    </script>
+  </body>
+</html>
